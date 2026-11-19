@@ -306,7 +306,7 @@ body.busy .top:after{content:"";position:absolute;left:0;right:0;bottom:0;height
    ufcstats.com / Greco1899) + ESPN (cartazes, resultados e odds).
    Só vai à internet quando carregas em ↻. Tudo fica no telemóvel («ko_…»).
    ===================================================================== */
-const APP_VER = '1.0.0';
+const APP_VER = '1.0.1';
 
 /* ---------- utilitários ---------- */
 const $ = s => document.querySelector(s);
@@ -780,7 +780,15 @@ function botStats() {
   const w = S.filter(b => b.st === 'won').length, l = S.filter(b => b.st === 'lost').length;
   const dog = S.filter(b => b.nv != null && b.nv < 0.5), dw = dog.filter(b => b.st === 'won').length;
   const st = S.reduce((s, b) => s + b.stake, 0), ret = S.reduce((s, b) => s + (b.ret || 0), 0);
-  return { n: B.length, open: B.filter(b => b.st === 'open').length, w, l, p: S.length - w - l, hit: w + l ? w / (w + l) : null, roi: st ? (ret - st) / st : null, pl: r2(ret - st), dogN: dog.length, dogW: dw };
+  const fav = S.filter(b => b.nv != null && b.nv >= 0.5), fw = fav.filter(b => b.st === 'won').length;
+  const plOf = L => r2(L.reduce((s, b) => s + (b.ret || 0) - b.stake, 0));
+  const byEv = {}; S.forEach(b => { const f = DB.f[b.g], k = f ? f.ev : '?'; (byEv[k] = byEv[k] || []).push(b); });
+  const evs = Object.entries(byEv).map(([k, L]) => ({ k, n: (DB.ev[k] || {}).n || 'Cartaz', d: (DB.ev[k] || {}).d || L[0].gd, w: L.filter(b => b.st === 'won').length, l: L.filter(b => b.st === 'lost').length, pl: plOf(L) })).sort((a, b) => a.d < b.d ? 1 : -1);
+  const byWc = {}; S.forEach(b => { const f = DB.f[b.g], k = f ? f.wc : '?'; const o = byWc[k] = byWc[k] || { n: 0, w: 0, pl: 0 }; o.n++; if (b.st === 'won') o.w++; o.pl += (b.ret || 0) - b.stake; });
+  let run = 0; const curve = S.slice().sort((a, b) => (a.tset || a.t) - (b.tset || b.t)).map(b => (run += (b.ret || 0) - b.stake));
+  const conf = S.filter(b => b.pk >= 0.7), cw = conf.filter(b => b.st === 'won').length;
+  return { n: B.length, open: B.filter(b => b.st === 'open').length, openL: B.filter(b => b.st === 'open'), w, l, p: S.length - w - l, hit: w + l ? w / (w + l) : null, roi: st ? (ret - st) / st : null, pl: r2(ret - st), staked: r2(st),
+    dogN: dog.length, dogW: dw, dogPl: plOf(dog), favN: fav.length, favW: fw, favPl: plOf(fav), confN: conf.length, confW: cw, evs, byWc, curve };
 }
 
 /* =====================================================================
@@ -1026,6 +1034,7 @@ function viewInicio() {
     if (!S0 && !picks.length) h += `<div class="small muted">Nada com confiança suficiente. Mete as odds da Betano nos combates: o Ko diz onde há valor.</div>`;
     h += `<button class="btn fill full" style="margin-top:10px" onclick="DAY=0;BT='seg';go('jogos')">${ic('glove')} Abrir o cartaz e o boletim</button></div>`;
   }
+  h += botHome();
   h += `<div class="pn hl">${pnH(`${ic('check')} Veredito do cartaz anterior`, Y.G.length + (Y.G.length === 1 ? ' combate' : ' combates'))}`;
   if (!Y.n) h += `<div class="small muted">${Y.G.length ? 'O Ko não tinha previsões guardadas (só guarda quando tocas em ↻ antes dos combates).' : 'Sem combates lidos do cartaz anterior: toca em ↻.'}</div>`;
   else {
@@ -1569,7 +1578,7 @@ function openStats() {
      <tr><td style="text-align:left">Quem ganha</td><td>${gl(T.win.ko.toFixed(3))}</td><td>${gl(T.win.mk.toFixed(3))}</td><td>0,693</td></tr>
      <tr><td style="text-align:left">Como acaba (6 desfechos)</td><td>${gl(T.meth.ko.toFixed(3))}</td><td>${gl(T.meth.mk.toFixed(3))}</td><td>1,792</td></tr></table>
     <div class="small muted" style="margin-top:6px">Sem ver o futuro, o Ko sozinho fica atrás das odds de fecho, como quase todos os modelos públicos de MMA (as casas sabem de lesões, cortes de peso e campos de treino). Por isso a app junta as odds com peso alto. Onde o Ko ajuda: dá preço a <b>todos</b> os desfechos e rondas, mesmo quando a casa não os mostra, e no método bate a «média da categoria» (${gl(T.meth.base.toFixed(3))}).</div>`;
-  if (!R.n && !ss) return openSheet('Estatísticas', h + `<div class="pn empty"><div class="face">${koFace('ok')}</div>As estatísticas da app enchem-se sozinhas: o Ko guarda a previsão de cada combate antes de começar. Toca em ↻ antes de cada cartaz.</div>`);
+  if (!R.n && !ss && !botStats().n) return openSheet('Estatísticas', h + `<div class="pn empty"><div class="face">${koFace('ok')}</div>As estatísticas da app enchem-se sozinhas: o Ko guarda a previsão de cada combate antes de começar. Toca em ↻ antes de cada cartaz.</div>`);
   const sl = Object.values(SLIPS).map(slipResult).filter(x => x && x.st !== 'open'), slW = sl.filter(x => x.st === 'won').length;
   h += catH('check', 'Na app', 'var(--c-green)', R.n + ' combates') +
     (R.n ? attr('Vencedor certo', Math.round(R.win / R.n * 100), 'var(--c-green)', pm(R.win, R.n), 100) +
@@ -1584,6 +1593,7 @@ function openStats() {
     (!ss && !sl.length ? '<div class="small muted">Ainda sem resultados.</div>' : '');
   if (R.n) h += catH('chip', 'Quando o Ko diz X%, acontece…', 'var(--c-purple)') + `<table class="tbl"><tr><th>Confiança</th><th>Combates</th><th>Ko dizia</th><th>Aconteceu</th></tr>` +
     ['50-55', '55-65', '65-75', '75-85', '85+'].filter(b => R.conf[b]).map(b => { const C = R.conf[b]; return `<tr><td>${b}%</td><td>${C.n}</td><td>${pct(C.p / C.n)}</td><td class="${Math.abs(C.w / C.n - C.p / C.n) < 0.08 ? 'pos' : 'neg'}">${pct(C.w / C.n)}</td></tr>`; }).join('') + `</table>`;
+  { const B = botStats(); h += catH('robot', 'Ko sozinho (bot)', 'var(--c-purple)', B.n ? `${B.n} apostas · ${B.open} em jogo` : 'ainda sem apostas') + (B.w + B.l ? botStatsBlock(B) : '<div class="small muted">O bot aposta sozinho quando atualizas antes de um cartaz. As estatísticas aparecem depois dos primeiros resultados.</div>'); }
   h += catH('coins', 'Contas', 'var(--c-yellow)') + ['tu', 'ko', 'pi'].map(k => { const s = accStats(k); return `<div class="why"><span>${ACC[k].n}</span><b class="${s.profit >= 0 ? 'pos' : 'neg'}">${sEur(s.profit)} · ROI ${sPct(s.roi)} · ${s.w}/${s.w + s.l}</b></div>`; }).join('');
   h += `<button class="btn go full" style="margin-top:12px" onclick="exportPreds()">${ic('download')} Exportar previsões (Excel)</button>
    <div class="pn small muted">Os números entre parênteses são a margem de sorte (95%). Tudo foi guardado antes de cada combate começar.</div>`;
@@ -1615,6 +1625,32 @@ function openHow() {
    ${catH('target', '6. O que dizem os testes às cegas', 'var(--c-green)')}<p>Afinado em 2013-18, escolhido com 2019-21 e testado sem ver o futuro em 2022-26 (${T.win.n.toLocaleString('pt-PT')} combates). O Ko sozinho acerta ~61% dos vencedores; as odds de fecho ~67%. <b>Honestidade:</b> no MMA as casas sabem coisas que os números não sabem (lesões, cortes de peso). O Ko brilha a pôr preço no <b>método</b> e nas <b>rondas</b>, e a dizer-te quando a Betano paga demais.</p>
    <p class="small muted">Contas: <b>Tu</b> apostas e o Ko dá opinião; <b>Mister Ko</b> responde a cada aposta tua (duelo); <b>Ko sozinho</b> é um bot: aposta ${eur(CFG.piStake)} em cada combate no lutador que a cabeça dele acha que ganha, sem ninguém lhe mexer.</p></div>`);
 }
+function botCurve(c) {
+  if (c.length < 2) return '';
+  const W = 320, H = 90, mn = Math.min(0, ...c), mx = Math.max(0, ...c), sp = mx - mn || 1, x = i => 8 + i / (c.length - 1) * (W - 16), y = v => 8 + (mx - v) / sp * (H - 16);
+  const pts = c.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '), last = c[c.length - 1];
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;margin:6px 0"><line x1="8" x2="${W - 8}" y1="${y(0)}" y2="${y(0)}" stroke="rgba(0,0,0,.18)" stroke-dasharray="3 3"/><polyline points="${pts}" fill="none" stroke="${last >= 0 ? 'var(--pos)' : 'var(--c-red)'}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="${x(c.length - 1)}" cy="${y(last)}" r="3.5" fill="${last >= 0 ? 'var(--pos)' : 'var(--c-red)'}"/></svg><div class="small muted">Lucro acumulado do bot, aposta a aposta (linha tracejada = zero).</div>`;
+}
+function botStatsBlock(S, noTop) {
+  const T = SEED.test.bot, row = (lbl, txt, cls) => `<div class="why"><span>${lbl}</span><b class="${cls || ''}">${txt}</b></div>`;
+  let h = (noTop ? '' : `<div class="mosaic"><div><b>${S.hit == null ? '—' : pct(S.hit)}</b><small>acerto ${S.w}-${S.l}</small></div><div><b class="${S.roi == null ? '' : S.roi >= 0 ? 'pos' : 'neg'}">${S.roi == null ? '—' : sPct(S.roi)}</b><small>ROI</small></div><div><b class="${S.pl >= 0 ? 'pos' : 'neg'}">${sEur(S.pl)}</b><small>lucro</small></div></div>`) + botCurve(S.curve);
+  h += row('Com o favorito da casa', S.favN ? `${S.favW}/${S.favN} · ${sEur(S.favPl)}` : '—', S.favPl > 0 ? 'pos' : S.favPl < 0 ? 'neg' : '') +
+    row('Contra a casa (azarão)', S.dogN ? `${S.dogW}/${S.dogN} · ${sEur(S.dogPl)}` : '—', S.dogPl > 0 ? 'pos' : S.dogPl < 0 ? 'neg' : '') +
+    row('Quando tem 70%+ de certeza', S.confN ? `${S.confW}/${S.confN} (${pct(S.confW / S.confN)})` : '—') +
+    row('Teste às cegas 2022-26', `${pct(T.acerto)} · ${sPct(T.roi)} por aposta`, 'muted');
+  if (S.evs.length) h += catH('oct', 'Por cartaz', 'var(--c-red)') + `<table class="tbl"><tr><th style="text-align:left">Cartaz</th><th>V-D</th><th>Lucro</th></tr>${S.evs.slice(0, 12).map(x => `<tr><td style="text-align:left">${esc(evShort({ n: x.n }))} <span class="muted small">${new Date(x.d).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })}</span></td><td>${x.w}-${x.l}</td><td class="${x.pl >= 0 ? 'pos' : 'neg'}">${sEur(x.pl)}</td></tr>`).join('')}</table>`;
+  const wcs = Object.entries(S.byWc).filter(([, o]) => o.n >= 3).sort((a, b) => b[1].n - a[1].n);
+  if (wcs.length) h += catH('glove', 'Por categoria', 'var(--c-red)') + `<table class="tbl"><tr><th style="text-align:left">Categoria</th><th>V/N</th><th>Lucro</th></tr>${wcs.map(([k, o]) => `<tr><td style="text-align:left">${esc(wcPT(k))}</td><td>${o.w}/${o.n}</td><td class="${o.pl >= 0 ? 'pos' : 'neg'}">${sEur(o.pl)}</td></tr>`).join('')}</table>`;
+  return h;
+}
+function botHome() {
+  const S = botStats();
+  if (!CFG.piOn && !S.n) return '';
+  return `<div class="pn" style="cursor:pointer" onclick="ACCF='pi';go('contas')">${pnH(`${ic('robot')} Ko sozinho · bot automático`, CFG.piOn ? '<span class="pos">ligado</span>' : '<span class="neg">desligado</span>')}
+    <div class="opinion" style="margin:0 0 8px"><div class="face">${koFace(S.roi == null ? 'ok' : S.roi >= 0 ? 'win' : 'sad')}</div><div class="small">${S.open ? `Tenho <b>${S.open} aposta${S.open === 1 ? '' : 's'}</b> em jogo (${eur(S.openL.reduce((s, b) => s + b.stake, 0))}): ${S.openL.slice(0, 3).map(b => esc(b.lb.replace(' ganha', ''))).join(', ')}${S.open > 3 ? '…' : ''}.` : 'Aposto sozinho em todos os combates do cartaz, quando atualizas.'}</div></div>
+    ${S.w + S.l ? `<div class="mosaic"><div><b>${pct(S.hit)}</b><small>acerto ${S.w}-${S.l}</small></div><div><b class="${S.roi >= 0 ? 'pos' : 'neg'}">${sPct(S.roi)}</b><small>ROI</small></div><div><b class="${S.pl >= 0 ? 'pos' : 'neg'}">${sEur(S.pl)}</b><small>lucro</small></div></div>` : ''}
+    <div class="small muted" style="margin-top:4px">Toca para ver tudo o que o bot fez.</div></div>`;
+}
 function botMini() {
   const S = botStats();
   return `<div class="pn" style="margin-top:10px;cursor:pointer" onclick="ACCF='pi';render()"><div class="opinion" style="margin:0"><div class="face">${koFace(S.roi == null ? 'ok' : S.roi >= 0 ? 'win' : 'sad')}</div><div><b>Ko sozinho</b> · ${CFG.piOn ? 'ligado' : '<span class="neg">desligado</span>'}<div class="small muted">${S.n ? `${S.n} apostas sozinho · ${S.w}-${S.l}${S.p ? '-' + S.p : ''} · ${S.open} em jogo${S.roi != null ? ' · ROI ' + sPct(S.roi) : ''}` : 'Aposta sozinho em todos os combates do cartaz quando atualizas. Toca para ver.'}</div></div></div></div>`;
@@ -1628,10 +1664,7 @@ function botPanel() {
     : 'Abaixo do teste às cegas: as casas estão a saber mais do que ele. É por isso que a app mistura as odds com peso alto.';
   return `<div class="pn" style="margin-top:10px">${pnH(`${ic('robot')} Como se porta sozinho`, CFG.piOn ? 'ligado' : 'desligado')}
     <div class="opinion"><div class="face">${koFace('ok')}</div><div class="small">Em cada combate do cartaz aposto <b>${eur(CFG.piStake)}</b> no lutador que a <b>minha cabeça</b> acha que ganha (sem copiar as odds), à odd da ESPN do momento. Ninguém me mexe: é a experiência honesta.</div></div>
-    ${row('Acerto no vencedor', S.hit, 0.6, S.hit == null ? '—' : `${pct(S.hit)} (${S.w}-${S.l}${S.p ? '-' + S.p : ''})`)}
-    ${row('Lucro por aposta (ROI)', S.roi, 0, S.roi == null ? '—' : `${sPct(S.roi)} · ${sEur(S.pl)}`)}
-    ${row('Quando vai contra a casa (azarão)', S.dogN ? S.dogW / S.dogN : null, 0.4, S.dogN ? `${S.dogW} de ${S.dogN}` : '—')}
-    <div class="small muted" style="margin-top:8px">No teste às cegas 2022-26 (${T.n.toLocaleString('pt-PT')} combates) esta regra acertou <b>${pct(T.acerto)}</b> e deu <b>${sPct(T.roi)}</b> por aposta.</div>
+    ${botStatsBlock(S, true)}
     <div class="small" style="margin-top:8px">${verdict}</div>
     <div class="small muted" style="margin-top:8px">Eu só aposto quando atualizas a app: abre-a pelo menos uma vez antes de cada cartaz (normalmente ao sábado).</div>
     ${!CFG.piOn ? `<button class="btn fill full" style="margin-top:12px" onclick="CFG.piOn=true;LS.set('cfg',CFG);pilotRun();render()">Ligar o Ko sozinho</button>` : ''}</div>`;

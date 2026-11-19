@@ -6,7 +6,7 @@
    ufcstats.com / Greco1899) + ESPN (cartazes, resultados e odds).
    Só vai à internet quando carregas em ↻. Tudo fica no telemóvel («ko_…»).
    ===================================================================== */
-const APP_VER = '1.0.0';
+const APP_VER = '1.0.1';
 
 /* ---------- utilitários ---------- */
 const $ = s => document.querySelector(s);
@@ -480,7 +480,15 @@ function botStats() {
   const w = S.filter(b => b.st === 'won').length, l = S.filter(b => b.st === 'lost').length;
   const dog = S.filter(b => b.nv != null && b.nv < 0.5), dw = dog.filter(b => b.st === 'won').length;
   const st = S.reduce((s, b) => s + b.stake, 0), ret = S.reduce((s, b) => s + (b.ret || 0), 0);
-  return { n: B.length, open: B.filter(b => b.st === 'open').length, w, l, p: S.length - w - l, hit: w + l ? w / (w + l) : null, roi: st ? (ret - st) / st : null, pl: r2(ret - st), dogN: dog.length, dogW: dw };
+  const fav = S.filter(b => b.nv != null && b.nv >= 0.5), fw = fav.filter(b => b.st === 'won').length;
+  const plOf = L => r2(L.reduce((s, b) => s + (b.ret || 0) - b.stake, 0));
+  const byEv = {}; S.forEach(b => { const f = DB.f[b.g], k = f ? f.ev : '?'; (byEv[k] = byEv[k] || []).push(b); });
+  const evs = Object.entries(byEv).map(([k, L]) => ({ k, n: (DB.ev[k] || {}).n || 'Cartaz', d: (DB.ev[k] || {}).d || L[0].gd, w: L.filter(b => b.st === 'won').length, l: L.filter(b => b.st === 'lost').length, pl: plOf(L) })).sort((a, b) => a.d < b.d ? 1 : -1);
+  const byWc = {}; S.forEach(b => { const f = DB.f[b.g], k = f ? f.wc : '?'; const o = byWc[k] = byWc[k] || { n: 0, w: 0, pl: 0 }; o.n++; if (b.st === 'won') o.w++; o.pl += (b.ret || 0) - b.stake; });
+  let run = 0; const curve = S.slice().sort((a, b) => (a.tset || a.t) - (b.tset || b.t)).map(b => (run += (b.ret || 0) - b.stake));
+  const conf = S.filter(b => b.pk >= 0.7), cw = conf.filter(b => b.st === 'won').length;
+  return { n: B.length, open: B.filter(b => b.st === 'open').length, openL: B.filter(b => b.st === 'open'), w, l, p: S.length - w - l, hit: w + l ? w / (w + l) : null, roi: st ? (ret - st) / st : null, pl: r2(ret - st), staked: r2(st),
+    dogN: dog.length, dogW: dw, dogPl: plOf(dog), favN: fav.length, favW: fw, favPl: plOf(fav), confN: conf.length, confW: cw, evs, byWc, curve };
 }
 
 /* =====================================================================
