@@ -123,7 +123,7 @@ function viewInicio() {
   if (main && main.s === 'pre') h += fightCard(main, true);
   if (pre.length) {
     h += `<div class="pn">${pnH(`${ic('target')} O Ko guardou para este cartaz`, '')}`;
-    if (S0) h += catH('shield', 'Boletim seguro', 'var(--c-blue)', `Ko ${pct(S0.p)}`) + S0.legs.map(l => `<div class="why"><span>${esc(l.lb)} <span class="muted small">${esc(l.gl)}</span></span><b>${pct(l.p)}</b></div>`).join('');
+    if (S0) h += catH('shield', 'Boletim seguro', 'var(--c-blue)', `Ko ${pct(S0.p)}`) + S0.legs.map(l => `<div class="why"><span>${esc(l.lb)} <span class="muted small">${esc(l.gl)}${l.gd ? ' · ' + whenTxt(l.gd) : ''}</span></span><b>${pct(l.p)}</b></div>`).join('');
     if (picks.length) h += catH('gem', 'Apostas com valor', 'var(--c-orange)', picks.length + '') + picks.slice(0, 4).map(({ f, P }) => `<div class="why" onclick="GT='mk';openFight('${f.id}')"><span>${esc(selLabel(f, P.value.mk, P.value.sel, P.value.line))} <span class="muted small">${esc(gLabel(f))}</span></span><b>@ ${odd2(P.value.odd)} <span class="pos small">${sPct(P.value.ev)}</span></b></div>`).join('');
     if (!S0 && !picks.length) h += `<div class="small muted">Nada com confiança suficiente. Mete as odds da Betano nos combates: o Ko diz onde há valor.</div>`;
     h += `<button class="btn fill full" style="margin-top:10px" onclick="DAY=0;BT='seg';go('jogos')">${ic('glove')} Abrir o cartaz e o boletim</button></div>`;
@@ -136,7 +136,7 @@ function viewInicio() {
     if (Y.mn) h += attr('Acertou no método mais provável', Math.round(Y.mw / Y.mn * 100), 'var(--c-blue)', `${Y.mw} de ${Y.mn}`, 100);
     h += Y.bets.length ? catH('gem', 'Apostas que o Ko guardou', 'var(--c-orange)', `${Y.bw}/${Y.bn} · <b class="${Y.u >= 0 ? 'pos' : 'neg'}">${unitsTxt(Y.u)}</b>`) + Y.bets.map(({ f, v }) => `<div class="why" onclick="GT='ana';openFight('${f.id}')"><span>${okIc(v.pkr === 'won')} ${esc(v.pk.lb)} <span class="muted small">@ ${odd2(v.pk.odd)} · ${esc(resTxt(f))}</span></span><b class="${v.pku >= 0 ? 'pos' : 'neg'}">${unitsTxt(v.pku)}</b></div>`).join('')
       : `<div class="small muted" style="margin:8px 0">O Ko não encontrou valor: não apostou.</div>`;
-    if (Y.S) h += catH('shield', 'Boletim seguro', 'var(--c-blue)', Y.sr.st === 'won' ? '<b class="pos">ganhou</b>' : Y.sr.st === 'lost' ? '<b class="neg">perdeu</b>' : 'em curso') + Y.S.legs.map(l => `<div class="why"><span>${okIc(l.r == null ? null : l.r !== 'lost')} ${esc(l.lb)}</span><b class="muted">${pct(l.p)}</b></div>`).join('');
+    if (Y.S) h += catH('shield', 'Boletim seguro', 'var(--c-blue)', Y.sr.st === 'won' ? '<b class="pos">ganhou</b>' : Y.sr.st === 'lost' ? '<b class="neg">perdeu</b>' : 'em curso') + Y.S.legs.map(l => `<div class="why"><span>${okIc(l.r == null ? null : l.r !== 'lost')} ${esc(l.lb)}${l.gd ? ` <span class="muted small">${whenTxt(l.gd)}</span>` : ''}</span><b class="muted">${pct(l.p)}</b></div>`).join('');
   }
   h += `<button class="btn go full" style="margin-top:10px" onclick="DAY=-1;go('jogos')">${ic('list')} Ver o cartaz anterior</button></div>`;
   h += `<div class="pn">${pnH(`${ic('chart')} Como vai o Ko`, ST.n + ' combates previstos')}`;
@@ -182,7 +182,7 @@ function pastPanel(off) {
   const Y = dayVerdict(off);
   let h = `<div class="pn hl">${pnH(`${ic('check')} Veredito do cartaz`, Y.n ? `vencedor ${Y.w}/${Y.n}${Y.mn ? ` · método ${Y.mw}/${Y.mn}` : ''}` : '')}`;
   if (!Y.n && !Y.S) return h + `<div class="small muted">O Ko não tinha previsões guardadas para estes combates.</div></div>`;
-  if (Y.S) h += catH('shield', 'Boletim seguro', 'var(--c-blue)', `${Y.sr.w}/${Y.sr.n} · ${Y.sr.st === 'won' ? '<b class="pos">ganhou</b>' : Y.sr.st === 'lost' ? '<b class="neg">perdeu</b>' : 'em curso'}`) + Y.S.legs.map(l => `<div class="why"><span>${okIc(l.r == null ? null : l.r !== 'lost')} ${esc(l.lb)} <span class="muted small">${esc(l.gl)}</span></span><b class="muted">${pct(l.p)}</b></div>`).join('');
+  if (Y.S) h += catH('shield', 'Boletim seguro', 'var(--c-blue)', `${Y.sr.w}/${Y.sr.n} · ${Y.sr.st === 'won' ? '<b class="pos">ganhou</b>' : Y.sr.st === 'lost' ? '<b class="neg">perdeu</b>' : 'em curso'}`) + Y.S.legs.map(l => `<div class="why"><span>${okIc(l.r == null ? null : l.r !== 'lost')} ${esc(l.lb)} <span class="muted small">${esc(l.gl)}${l.gd ? ' · ' + whenTxt(l.gd) : ''}</span></span><b class="muted">${pct(l.p)}</b></div>`).join('');
   h += catH('gem', 'Apostas com valor', 'var(--c-orange)', Y.bn ? `${Y.bw}/${Y.bn} · <b class="${Y.u >= 0 ? 'pos' : 'neg'}">${unitsTxt(Y.u)}</b>` : '') +
     (Y.bets.length ? Y.bets.map(({ f, v }) => `<div class="why"><span>${okIc(v.pkr === 'won')} ${esc(v.pk.lb)} <span class="muted small">@ ${odd2(v.pk.odd)}</span></span><b class="${v.pku >= 0 ? 'pos' : 'neg'}">${unitsTxt(v.pku)}</b></div>`).join('') : '<div class="small muted">O Ko não apostou nestes combates (nada com valor).</div>');
   return h + `<div class="small muted" style="margin-top:6px">u = unidades (1 u = o valor de uma aposta). Tudo foi guardado antes de cada combate começar.</div></div>`;
@@ -205,13 +205,13 @@ function boletimPanel(C, auto, picks) {
     else {
       h += `<div class="small muted" style="margin:10px 0 2px">Seguro não é certo: 1 em cada 4 boletins de 75% falha. As probabilidades foram afinadas às cegas (em 2022-26 o boletim prometia 79% e acertou 83%). O Ko prefere o <b>favorito a ganhar</b>; senão, <b>«mais de 0,5 / 1,5 rondas»</b>. Mete as odds da Betano.</div>` +
         C.map((c, i) => { const key = legKey(c), od = SS.odd[key] != null ? SS.odd[key] : c.odd; return `<div class="leg"><input type="checkbox" ${SS.sel.has(key) ? 'checked' : ''} onchange="ssTog(${i},this.checked)">
-        <div><div class="t">${esc(c.lb)}</div><div class="g">${esc(gLabel(c.g))} · ${esc(mkName(c.mk))}</div><div class="p">Ko ${pct(c.p)}</div></div>
+        <div><div class="t">${esc(c.lb)}</div><div class="when">${ic('clock')} ${whenTxt(c.g.d)}</div><div class="g">${esc(gLabel(c.g))} · ${esc(mkName(c.mk))}</div><div class="p">Ko ${pct(c.p)}</div></div>
         <input class="od${SS.odd[key] == null ? ' est' : ''}" inputmode="decimal" value="${odd2(od)}" oninput="ssOdd(${i},this)"></div>`; }).join('') + `<div class="sum" id="ssSum"></div>`;
     }
     const st = safeStats();
     if (st) h += `<div class="small muted" style="margin-top:8px">${ic('chart')} Seguro até hoje: acertou <b>${st.w}/${st.n}</b> seleções (${pct(st.w / st.n)}) · prometia ${pct(st.p)}</div>`;
   } else {
-    h += picks.length ? picks.map(({ f, P }) => { const v = P.value, i = P.cands.indexOf(v); return `<div class="pick"><div style="min-width:0"><div class="g">${esc(gLabel(f))} · ${esc(mkName(v.mk))} · ${esc(v.src)}</div><div class="l">${esc(selLabel(f, v.mk, v.sel, v.line))}</div><div class="g">Ko ${pct(v.p)} · odd justa ${odd2(v.fair)}</div></div>
+    h += picks.length ? picks.map(({ f, P }) => { const v = P.value, i = P.cands.indexOf(v); return `<div class="pick"><div style="min-width:0"><div class="g">${whenTxt(f.d)} · ${esc(gLabel(f))} · ${esc(mkName(v.mk))} · ${esc(v.src)}</div><div class="l">${esc(selLabel(f, v.mk, v.sel, v.line))}</div><div class="g">Ko ${pct(v.p)} · odd justa ${odd2(v.fair)}</div></div>
       <div class="o">${odd2(v.odd)}<small>valor ${sPct(v.ev)}</small></div><button class="btn go sm" onclick="openBet('${f.id}',${i})">Apostar</button></div>`; }).join('') + `<div class="small muted" style="margin-top:8px">«Valor» = a odd paga mais do que o Ko acha justo. Não é certeza: é vantagem a longo prazo.</div>`
       : `<div class="small" style="margin-top:10px">O Ko só procura valor nas odds da <b>Betano</b> que tu metes. As da ESPN já entram nas contas dele, por isso «valor» contra elas seria ilusão.</div><div class="small muted" style="margin-top:6px"><b>Onde pode haver valor:</b> no <b>método de vitória</b> e no <b>total de rondas</b>, onde as casas põem margens grandes e a matemática do Ko (ritmo de KO e de finalização de cada lutador) tem mais a dizer. Abre um combate → <b>Odds</b> → mete as da Betano.</div>`;
   }
@@ -256,7 +256,7 @@ function placeSlip() {
 function shareSlip() {
   const L = ssLegs(); if (!L.length) return;
   const P = L.reduce((a, x) => a * x.c.p, 1), O = L.reduce((a, x) => a * x.odd, 1);
-  shareText(`🥊 Boletim seguro do Mister Ko · ${new Date(L[0].c.g.d).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })}\n` + L.map((x, i) => `${i + 1}) ${x.c.lb} @ ${odd2(x.odd)} (${gLabel(x.c.g)})`).join('\n') + `\nOdd total ${odd2(O)} · o Ko dá ${pct(P)}\n(simulação, sem dinheiro real)`);
+  shareText(`🥊 Boletim seguro do Mister Ko · ${new Date(L[0].c.g.d).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })}\n` + L.map((x, i) => `${i + 1}) ${whenTxt(x.c.g.d)} · ${x.c.lb} @ ${odd2(x.odd)} (${gLabel(x.c.g)})`).join('\n') + `\nOdd total ${odd2(O)} · o Ko dá ${pct(P)}\n(simulação, sem dinheiro real)`);
 }
 async function shareText(txt) {
   try { if (navigator.share) { await navigator.share({ text: txt }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }

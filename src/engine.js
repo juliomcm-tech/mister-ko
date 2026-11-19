@@ -6,7 +6,7 @@
    ufcstats.com / Greco1899) + ESPN (cartazes, resultados e odds).
    Só vai à internet quando carregas em ↻. Tudo fica no telemóvel («ko_…»).
    ===================================================================== */
-const APP_VER = '1.2.2';
+const APP_VER = '1.2.3';
 
 /* ---------- utilitários ---------- */
 const $ = s => document.querySelector(s);
@@ -44,6 +44,7 @@ const fmtET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', y
 const etYmd = d => fmtET.format(d).replace(/-/g, '');
 const ymdAdd = (s, n) => { const d = new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8) + n)); return d.toISOString().slice(0, 10).replace(/-/g, ''); };
 const hhmm = iso => new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+const whenTxt = iso => { if (!iso) return ''; const d = new Date(iso); return dayLbl(iso) + ' · ' + hhmm(iso) + (d.getHours() < 6 ? ' 🌙' : ''); };
 const dayLbl = iso => new Date(iso).toLocaleDateString('pt-PT', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '');
 const todayET = () => etYmd(new Date());
 const yearsBetween = (a, b) => (new Date(a) - new Date(b)) / (365.25 * 864e5);
