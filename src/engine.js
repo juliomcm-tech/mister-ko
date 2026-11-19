@@ -6,7 +6,7 @@
    ufcstats.com / Greco1899) + ESPN (cartazes, resultados e odds).
    Só vai à internet quando carregas em ↻. Tudo fica no telemóvel («ko_…»).
    ===================================================================== */
-const APP_VER = '1.2.1';
+const APP_VER = '1.2.2';
 
 /* ---------- utilitários ---------- */
 const $ = s => document.querySelector(s);
@@ -208,7 +208,7 @@ async function refresh() {
     snapshotPreds();
     snapshotSlips();
     const sett = settleAll();
-    const pil = pilotRun();
+    const pil = pilotRun(); bossFeed();
     LS.set('last', Date.now());
     toast(fails && !got ? 'Sem ligação à ESPN. Experimenta «Testar ligação» nas Definições.' : `Atualizado: ${got} combate${got === 1 ? '' : 's'}${odds ? ` · odds em ${odds}` : ''}${sett ? ` · ${sett} aposta${sett === 1 ? '' : 's'} fechada${sett === 1 ? '' : 's'}` : ''}${pil ? ` · o Ko sozinho apostou em ${pil}` : ''}`, 4200);
   } catch (e) {
@@ -538,6 +538,7 @@ function safeCands(off) {
       { mk: 'ml', sel: fav, line: null, c: calP('ml', favA ? P.pNV : 1 - P.pNV) },
       { mk: 'tr', sel: 'o', line: 0.5, c: calP('o05', P.survFlat(2.5)) },
       { mk: 'tr', sel: 'o', line: 1.5, c: calP('o15', P.survFlat(7.5)) }];
+    bossPool(f, opts);
     const keep = opts.filter(x => x.c >= SAFE_LEG && x.c <= SAFE_MAX);
     if (!keep.length) return;
     const best = keep.find(x => x.mk === 'ml') || keep.sort((a, b) => a.c - b.c)[0];   // favorito primeiro: tem odd real e as casas pagam-no abaixo do justo
@@ -590,4 +591,35 @@ function fighterCard(M, s) {
   const z = x.hz, B = { ko: 0.02, sub: 0.012 };
   const pw = z.eko > 0.05 ? (z.koW + 1) / (z.eko + 1) : 1, gr = z.esub > 0.05 ? (z.subW + 1) / (z.esub + 1) : 1, du = z.ekoL > 0.05 ? (z.koL + 1) / (z.ekoL + 1) : 1;
   return { x, ovr: k(70 + x.r * 10), pow: k(55 + 22 * Math.log(pw)), grap: k(55 + 22 * Math.log(gr)), chin: k(70 - 22 * Math.log(du)), exp: k(40 + 6 * Math.sqrt(x.k || 0) * 3), sy };
+}
+
+/* =====================================================================
+   📤 FICHA PARA O MISTER BOSS
+   Em cada atualização, o Ko deixa no telemóvel as seleções do dia que
+   passam dos 80% (e as apostas de valor), e confere as antigas com o seu
+   próprio código de liquidação. O Mister Boss só lê esta ficha.
+   ===================================================================== */
+let BPOOL = null;
+function bossPool(g, opts) {
+  if (!BPOOL) return;
+  opts.forEach(x => { const p = x.c != null ? x.c : x.p; if (p >= 0.80 && p <= 0.985) BPOOL.push({ g, mk: x.mk, sel: x.sel, line: x.line == null ? null : x.line, p, odd: x.odd || null, est: x.est !== false }); });
+}
+function bossFeed() {
+  try {
+    const F = LS.get('boss', null) || { v: 1, legs: {} }, now = Date.now();
+    const gameOf = id => DB.f[id], segOf = g => ({ lg: 'UFC', cat: wcPT(g.wc) }), glOf = g => gLabel(g);
+    BPOOL = []; [0, 1].forEach(d => { try { safeCands(d); } catch (e) {} }); const pool = BPOOL; BPOOL = null;
+    Object.values(DB.f).filter(g => g && g.s === 'pre' && new Date(g.d).getTime() > now && new Date(g.d).getTime() < now + 8 * 864e5).forEach(g => {
+      try { const v = predict(g).value; if (v) pool.push({ g, mk: v.mk, sel: v.sel, line: v.line == null ? null : v.line, p: v.p, odd: v.odd, est: false, val: r2(v.ev) }); } catch (e) {}
+    });
+    pool.forEach(x => {
+      const id = x.g.id + '|' + x.mk + '|' + x.sel + '|' + x.line + (x.val != null ? '|v' : ''), L = F.legs[id];
+      const rec = { id, g: x.g.id, gl: glOf(x.g), d: x.g.d, mk: x.mk, mkn: mkName(x.mk), sel: x.sel, line: x.line, lb: selLabel(x.g, x.mk, x.sel, x.line), p: Math.round(x.p * 1000) / 1000, odd: x.odd ? r2(x.odd) : null, est: !!x.est, val: x.val != null ? x.val : null, seg: segOf(x.g), st: 'open', t: now };
+      if (!L) F.legs[id] = rec; else if (L.st === 'open' && new Date(L.d).getTime() > now) Object.assign(L, { p: rec.p, odd: rec.odd, est: rec.est, val: rec.val, t: now });
+    });
+    Object.values(F.legs).forEach(l => { if (l.st !== 'open') return; const g = gameOf(l.g); if (!g) return; let r = null; try { r = outcome(l, g); } catch (e) {} if (r) { l.st = r; l.tset = now; } });
+    const ks = Object.keys(F.legs); if (ks.length > 900) ks.sort((a, b) => F.legs[a].t - F.legs[b].t).slice(0, ks.length - 900).forEach(k => delete F.legs[k]);
+    Object.assign(F, { app: 'ko', name: 'Mister Ko', sport: 'MMA · UFC', ver: APP_VER, t: now });
+    LS.set('boss', F);
+  } catch (e) { console.warn('bossFeed', e); }
 }
