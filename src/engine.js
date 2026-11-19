@@ -6,7 +6,7 @@
    ufcstats.com / Greco1899) + ESPN (cartazes, resultados e odds).
    Só vai à internet quando carregas em ↻. Tudo fica no telemóvel («ko_…»).
    ===================================================================== */
-const APP_VER = '1.2.0';
+const APP_VER = '1.2.1';
 
 /* ---------- utilitários ---------- */
 const $ = s => document.querySelector(s);
@@ -398,7 +398,7 @@ function snapshotPreds() {
   Object.values(DB.f).forEach(f => {
     if (f.s !== 'pre' || new Date(f.d).getTime() < now - 6e5 || new Date(f.d).getTime() > now + 9 * 864e5) return;
     const P = predict(f);
-    PREDS[f.id] = { pa: r3(P.pA), pk0: r3(P.pK), nv: P.pNV != null ? r3(P.pNV) : null, m6: Object.fromEntries(MET_K.map(k => [k, r3(P.m6[k])])), pdec: r3(P.pdec), ev: f.ev, d: f.d,
+    PREDS[f.id] = { pa: r3(P.pA), pk0: r3(P.pK), nv: P.pNV != null ? r3(P.pNV) : null, m6: Object.fromEntries(MET_K.map(k => [k, r3(P.m6[k])])), pdec: r3(P.pdec), o05: r3(P.surv(2.5)), o15: r3(P.surv(7.5)), mk6: P.mk6 ? 1 : 0, oa: f.o && f.o.a || null, ob: f.o && f.o.b || null, wc: f.wc, sr: f.sr, ev: f.ev, d: f.d,
       pk: P.value ? { mk: P.value.mk, sel: P.value.sel, line: P.value.line, odd: P.value.odd, ev: r2(P.value.ev), p: r2(P.value.p), lb: selLabel(f, P.value.mk, P.value.sel, P.value.line), src: P.value.src } : null, ts: now };
   });
   const ks = Object.keys(PREDS); if (ks.length > 1500) ks.sort((a, b) => PREDS[a].ts - PREDS[b].ts).slice(0, ks.length - 1500).forEach(k => delete PREDS[k]);

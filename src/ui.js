@@ -61,7 +61,7 @@ function avatar(s, sz) {
   return `<span class="logo av2" style="${st}">${s.hs ? `<img src="${esc(s.hs)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<b>${esc(ini(s.n))}</b>${s.fl ? `<img class="fl" src="${esc(s.fl)}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span>`;
 }
 function renderTop() {
-  $('#chips').innerHTML = ['tu', 'ko'].map(k => `<span class="st" onclick="ACCF='${k}';go('contas')">${ic(ACC[k].ic)}${ACC[k].n.replace('Mister ', '')} ${eur(accStats(k).bal)}</span>`).join('');
+  $('#chips').innerHTML = ['tu', 'ko', 'pi'].map(k => `<span class="st" onclick="ACCF='${k}';go('contas')">${ic(ACC[k].ic)}${k === 'pi' ? 'Bot' : ACC[k].n.replace('Mister ', '')} ${eur(accStats(k).bal)}</span>`).join('');
   const last = LS.get('last', 0);
   setUpd(!SEED ? 'A carregar o arquivo do Ko…' : last ? 'Atualizado ' + new Date(last).toLocaleString('pt-PT', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ' · toca em ↻ para ir à ESPN' : 'Arquivo até ' + SEED.cut.split('-').reverse().join('/') + ' · toca em ↻ para os próximos cartazes');
   const nOpen = BETS.filter(b => b.acc === 'tu' && b.st === 'open').length;
@@ -695,8 +695,8 @@ function openStats() {
 }
 function exportPreds() {
   const f = v => String(v == null ? '' : v).replace('.', ',');
-  const rows = [['data', 'lutador_a', 'lutador_b', 'resultado', 'ko_prob_a', 'casa_prob_a', 'ko_decisao', 'vencedor_certo', 'metodo_certo', 'aposta_ko', 'odd', 'resultado_aposta', 'unidades']];
-  statsAll().rows.forEach(({ f: x, v }) => rows.push([x.d.slice(0, 10), x.A.n, x.B.n, resTxt(x), f(v.p.pa), f(v.p.nv), f(v.p.pdec), v.win ? 1 : 0, v.met == null ? '' : v.met ? 1 : 0, v.pk ? v.pk.lb : '', v.pk ? f(v.pk.odd) : '', v.pk ? v.pkr : '', v.pk ? f(r2(v.pku)) : '']));
+  const rows = [['data', 'categoria', 'rondas', 'lutador_a', 'lutador_b', 'vencedor', 'metodo', 'ronda', 'tempo', 'ko_prob_a', 'ko_sozinho_a', 'casa_prob_a', 'odd_a', 'odd_b', 'p_a_ko', 'p_a_fin', 'p_a_dec', 'p_b_ko', 'p_b_fin', 'p_b_dec', 'p_decisao', 'p_mais_0_5', 'p_mais_1_5', 'metodo_da_casa', 'vencedor_certo', 'metodo_certo', 'aposta_ko', 'odd', 'resultado_aposta', 'unidades']];
+  statsAll().rows.forEach(({ f: x, v }) => { const p = v.p, m = p.m6 || {}; rows.push([x.d.slice(0, 10), wcPT(x.wc), x.sr, x.A.n, x.B.n, x.w === 'A' ? x.A.n : x.w === 'B' ? x.B.n : x.w, x.m || '', x.rd || '', x.t != null ? Math.floor(x.t / 60) + ':' + String(x.t % 60).padStart(2, '0') : '', f(p.pa), f(p.pk0), f(p.nv), f(p.oa), f(p.ob), f(m.Ako), f(m.Asub), f(m.Adec), f(m.Bko), f(m.Bsub), f(m.Bdec), f(p.pdec), f(p.o05), f(p.o15), p.mk6 ? 1 : 0, v.win ? 1 : 0, v.met == null ? '' : v.met ? 1 : 0, v.pk ? v.pk.lb : '', v.pk ? f(v.pk.odd) : '', v.pk ? v.pkr : '', v.pk ? f(r2(v.pku)) : '']); });
   dlCSV(rows, 'mister-ko-previsoes-' + todayET() + '.csv');
 }
 let RWC = 'Lightweight';
