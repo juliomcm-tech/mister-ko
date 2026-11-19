@@ -6,7 +6,7 @@
    ufcstats.com / Greco1899) + ESPN (cartazes, resultados e odds).
    Só vai à internet quando carregas em ↻. Tudo fica no telemóvel («ko_…»).
    ===================================================================== */
-const APP_VER = '1.1.0';
+const APP_VER = '1.2.0';
 
 /* ---------- utilitários ---------- */
 const $ = s => document.querySelector(s);
@@ -336,7 +336,8 @@ function predict(f) {
   const m6k = methodProbs(lam, T, pA);
   // … e o mercado de método (quando a ESPN o traz) com peso alto
   let m6 = m6k, mk6 = null;
-  if (o.am && o.bm) {
+  const mkSum = o.am && o.bm ? 1 / o.am.ko + 1 / o.am.sub + 1 / o.am.dec + 1 / o.bm.ko + 1 / o.bm.sub + 1 / o.bm.dec : 0;
+  if (mkSum >= 1.05 && mkSum <= 1.40) {   // fora disto as odds de método estão estragadas (vimos centenas assim nos dados)
     const raw = { Ako: 1 / o.am.ko, Asub: 1 / o.am.sub, Adec: 1 / o.am.dec, Bko: 1 / o.bm.ko, Bsub: 1 / o.bm.sub, Bdec: 1 / o.bm.dec };
     const s = Object.values(raw).reduce((x, y) => x + y, 0); mk6 = {}; Object.keys(raw).forEach(k => { mk6[k] = raw[k] / s; });
     m6 = {}; Object.keys(m6k).forEach(k => { m6[k] = CFG.mktM * mk6[k] + (1 - CFG.mktM) * m6k[k]; }); m6 = rescale(m6, pA);
@@ -346,7 +347,9 @@ function predict(f) {
   const lamR = -Math.log(clamp(pdec, 1e-4, 0.9999)) / (5 * rp.reduce((x, y) => x + y, 0));
   const S = [1]; rp.forEach((h, i) => S.push(S[i] * Math.exp(-lamR * 5 * h)));
   const out = { f, R, pK, pNV, W, pA, lam, T, m6, m6k, mk6, pdec, rp, lamR, S, pD: 0.006 };
-  out.surv = t => { const r = Math.min(rp.length, Math.floor(t / 5)), rem = t - r * 5; return r >= rp.length ? S[rp.length] : S[r] * Math.exp(-lamR * rp[r] * rem); };
+  const H1 = 0.64, cR = 5 / (H1 + 4);   // risco no 1.º minuto da ronda = 0,64 do resto (o total da ronda não muda)
+  out.survFlat = t => { const r = Math.min(rp.length, Math.floor(t / 5)), rem = t - r * 5; return r >= rp.length ? S[rp.length] : S[r] * Math.exp(-lamR * rp[r] * rem); };
+  out.surv = t => { const r = Math.min(rp.length, Math.floor(t / 5)), rem = t - r * 5; if (r >= rp.length) return S[rp.length]; const e1 = Math.min(rem, 1) * H1 * cR + Math.max(0, rem - 1) * cR; return S[r] * Math.exp(-lamR * rp[r] * e1); };
   out.cands = candidates(f, out);
   const dogSide = c => (c.mk === 'ml' || c.mk === 'met') && ((c.sel[0] === 'A') !== (pA >= 0.5));
   const elig = out.cands.filter(c => c.src === 'Betano' && c.odd >= CFG.oddMin && c.odd <= CFG.oddMax && !(c.mk === 'met' && dogSide(c)) && !(c.mk === 'ml' && c.p < 0.30)).sort((x, y) => y.ev - x.ev);   // valor só contra a Betano
@@ -513,7 +516,11 @@ function botStats() {
    o boletim fica ≥70%. Favorito grande, «passa da 1.ª ronda», «não vai até ao
    fim» em combates de pesados… Odds estimadas: mete as da Betano.
    ===================================================================== */
-const SAFE_LEG = 0.85, SAFE_SLIP = 0.70;
+const SAFE_LEG = 0.85, SAFE_MAX = 0.96, SAFE_SLIP = 0.75, SAFE_MARGIN = 0.01, SAFE_LEGS = 4;
+/* calibração das seleções seguras (ajustada em 2013-18, confirmada em 2019-21 e 2022-26): o Ko era prudente demais
+   — «mais de 0,5 rondas» a 87% acertava 92%; o favorito a 84% acertava 92% */
+const SAFE_CAL = { ml: [-0.268, 1.448], o05: [-0.308, 1.371], o15: [1.137, 0.314] };
+const calP = (k, p) => { const c = SAFE_CAL[k]; return c ? Math.min(0.97, sig(c[0] + c[1] * logit(p))) : p; };
 function eventsSorted() { return Object.values(DB.ev).filter(e => Object.values(DB.f).some(f => f.ev === e.id)).sort((a, b) => a.d < b.d ? -1 : 1); }
 function upcomingIdx() {
   const E = eventsSorted(), now = Date.now();
@@ -525,18 +532,24 @@ const evFights = id => Object.values(DB.f).filter(f => f.ev === id).sort((a, b) 
 function safeCands(off) {
   const E = evAt(off || 0); if (!E) return [];
   const now = Date.now(), out = [];
-  evFights(E.id).filter(f => f.s === 'pre' && new Date(f.d).getTime() > now + 10 * 60e3).forEach(f => {
-    const P = predict(f), fav = P.pA >= 0.5 ? 'A' : 'B';
-    const opts = [{ mk: 'ml', sel: fav, line: null }, { mk: 'tr', sel: 'o', line: 0.5 }, { mk: 'tr', sel: 'o', line: 1.5 }, { mk: 'dist', sel: 'n', line: null }, { mk: 'dist', sel: 'y', line: null }];
-    opts.forEach(x => { x.p = probs(P, x.mk, x.sel, x.line).w; });
-    const best = opts.filter(x => x.p >= SAFE_LEG && x.p <= 0.95).sort((a, b) => a.p - b.p)[0];
-    if (best) out.push(Object.assign(best, { g: f, odd: r2(Math.max(1.02, 1 / (best.p * 1.06))), est: true, lb: selLabel(f, best.mk, best.sel, best.line) }));
+  evFights(E.id).filter(f => f.s === 'pre' && new Date(f.d).getTime() > now + 10 * 60e3 && f.o && f.o.a > 1 && f.o.b > 1).forEach(f => {
+    const P = predict(f), favA = P.pNV >= 0.5, fav = favA ? 'A' : 'B';
+    const opts = [
+      { mk: 'ml', sel: fav, line: null, c: calP('ml', favA ? P.pNV : 1 - P.pNV) },
+      { mk: 'tr', sel: 'o', line: 0.5, c: calP('o05', P.survFlat(2.5)) },
+      { mk: 'tr', sel: 'o', line: 1.5, c: calP('o15', P.survFlat(7.5)) }];
+    const keep = opts.filter(x => x.c >= SAFE_LEG && x.c <= SAFE_MAX);
+    if (!keep.length) return;
+    const best = keep.find(x => x.mk === 'ml') || keep.sort((a, b) => a.c - b.c)[0];   // favorito primeiro: tem odd real e as casas pagam-no abaixo do justo
+    best.p = best.c;
+    out.push(Object.assign(best, { g: f, odd: best.mk === 'ml' ? (fav === 'A' ? f.o.a : f.o.b) : r2(Math.max(1.02, 1 / (best.c * 1.06))), est: best.mk !== 'ml', lb: selLabel(f, best.mk, best.sel, best.line) }));
   });
   return out.sort((a, b) => b.p - a.p);
 }
-function safeAuto(C) {
+const slipP = L => L.reduce((a, c) => a * (c.p - SAFE_MARGIN), 1);   // promessa honesta do boletim
+function safeAuto(C) {   // junta enquanto a promessa (com 1 ponto de folga por seleção) fica ≥ 75%; no máximo 4
   const pick = new Set(); let P = 1;
-  C.forEach((c, i) => { if (pick.size < 5 && (i === 0 || P * c.p >= SAFE_SLIP)) { P *= c.p; pick.add(i); } });
+  C.forEach((c, i) => { if (pick.size >= SAFE_LEGS) return; const q = c.p - SAFE_MARGIN; if (!pick.size || P * q >= SAFE_SLIP) { P *= q; pick.add(i); } });
   return pick;
 }
 const safeLeg = (c, odd) => ({ g: c.g.id, gl: gLabel(c.g), gd: c.g.d, mk: c.mk, sel: c.sel, line: c.line, odd: r2(odd || c.odd), lb: c.lb, p: r2(c.p) });
@@ -560,7 +573,7 @@ function snapshotSlips() {
   const d = slipKey(0); if (!d) return; const old = SLIPS[d];
   if (old && (old.lock || old.legs.some(l => { const f = DB.f[l.g]; return !f || f.s !== 'pre' || new Date(f.d).getTime() <= Date.now(); }))) { old.lock = 1; LS.set('slips', SLIPS); return; }
   const C = safeCands(0), pick = safeAuto(C), legs = C.filter((_, i) => pick.has(i));
-  if (legs.length) SLIPS[d] = { legs: legs.map(c => safeLeg(c)), p: r2(legs.reduce((a, c) => a * c.p, 1)), odd: r2(legs.reduce((a, c) => a * c.odd, 1)), t: Date.now() };
+  if (legs.length) SLIPS[d] = { legs: legs.map(c => safeLeg(c)), p: r2(slipP(legs)), odd: r2(legs.reduce((a, c) => a * c.odd, 1)), t: Date.now() };
   const ks = Object.keys(SLIPS); if (ks.length > 60) ks.sort((a, b) => SLIPS[a].t - SLIPS[b].t).slice(0, ks.length - 60).forEach(k => delete SLIPS[k]);
   LS.set('slips', SLIPS);
 }

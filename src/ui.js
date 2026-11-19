@@ -196,14 +196,14 @@ function boletimPanel(C, auto, picks) {
   if (SS.k !== k) { SS = { k, C, sel: new Set(C.filter((_, i) => auto.has(i)).map(legKey)), odd: {}, stake: Math.max(CFG.min, 1) }; }
   SS.C = C; SS.auto = new Set(C.filter((_, i) => auto.has(i)).map(legKey));
   if (C.length) safeLogSave(C.filter((_, i) => auto.has(i)));
-  const Pall = C.filter((_, i) => auto.has(i)).reduce((a, c) => a * c.p, 1), nAuto = auto.size;
+  const Pall = slipP(C.filter((_, i) => auto.has(i))), nAuto = auto.size;
   let h = `<div class="pn hl"><div class="fold ${BOPEN ? 'open' : ''}" onclick="BOPEN=!BOPEN;LS.set('bopen',BOPEN);render()">${ic('target')}<b style="font-size:1.08rem">Boletim do Ko</b><span class="muted small">${nAuto ? `${nAuto} seleç${nAuto === 1 ? 'ão' : 'ões'} · ${pct(Pall)}` : ''}${picks.length ? ` · ${picks.length} com valor` : ''}</span><span class="chev">${ic('back')}</span></div>`;
   if (!BOPEN) return h + '</div>';
   h += `<div class="div"></div><div class="seg"><button class="${BT === 'seg' ? 'on' : ''}" onclick="BT='seg';render()">${ic('shield')} Seguro</button><button class="${BT === 'val' ? 'on' : ''}" onclick="BT='val';render()">${ic('gem')} Valor${picks.length ? ' ' + picks.length : ''}</button></div>`;
   if (BT === 'seg') {
-    if (!C.length) h += `<div class="small muted" style="margin-top:10px">Nenhuma seleção chega aos ${pct(SAFE_LEG)}. No MMA uma luva muda tudo: melhor não forçar.</div>`;
+    if (!C.length) h += `<div class="small muted" style="margin-top:10px">Nenhuma seleção chega aos ${pct(SAFE_LEG)} (o boletim só usa combates com odds da ESPN). No MMA uma luva muda tudo: melhor não forçar.</div>`;
     else {
-      h += `<div class="small muted" style="margin:10px 0 2px">Seguro não é certo: 3 em cada 10 boletins de 70% falham. Odds a cinzento são estimativas — mete as da Betano.</div>` +
+      h += `<div class="small muted" style="margin:10px 0 2px">Seguro não é certo: 1 em cada 4 boletins de 75% falha. As probabilidades foram afinadas às cegas (em 2022-26 o boletim prometia 79% e acertou 83%). O Ko prefere o <b>favorito a ganhar</b>; senão, <b>«mais de 0,5 / 1,5 rondas»</b>. Mete as odds da Betano.</div>` +
         C.map((c, i) => { const key = legKey(c), od = SS.odd[key] != null ? SS.odd[key] : c.odd; return `<div class="leg"><input type="checkbox" ${SS.sel.has(key) ? 'checked' : ''} onchange="ssTog(${i},this.checked)">
         <div><div class="t">${esc(c.lb)}</div><div class="g">${esc(gLabel(c.g))} · ${esc(mkName(c.mk))}</div><div class="p">Ko ${pct(c.p)}</div></div>
         <input class="od${SS.odd[key] == null ? ' est' : ''}" inputmode="decimal" value="${odd2(od)}" oninput="ssOdd(${i},this)"></div>`; }).join('') + `<div class="sum" id="ssSum"></div>`;
@@ -224,7 +224,7 @@ function ssSum() {
   const el = $('#ssSum'); if (!el) return;
   const L = ssLegs();
   if (!L.length) { el.innerHTML = '<span class="muted">Escolhe pelo menos uma seleção.</span>'; return; }
-  const P = L.reduce((a, x) => a * x.c.p, 1), O = L.reduce((a, x) => a * (x.odd > 1 ? x.odd : 1), 1), ev = P * O - 1;
+  const P = slipP(L.map(x => x.c)), O = L.reduce((a, x) => a * (x.odd > 1 ? x.odd : 1), 1), ev = P * O - 1;
   el.innerHTML = `<div class="n"><span>${L.length} seleç${L.length === 1 ? 'ão' : 'ões'} · Ko dá <b style="font-size:1.1rem">${pct(P)}</b></span><b>@ ${odd2(O)}</b></div>
    <div class="small ${ev >= 0 ? 'pos' : 'muted'}">${ev >= 0 ? 'Com estas odds o boletim tem valor ' + sPct(ev) : 'Paga ' + Math.abs(Math.round(ev * 100)) + '% menos do que o justo (normal nas seguras)'}</div>
    <div class="row" style="margin-top:8px"><div style="flex:1"><label class="f" style="margin-top:0">Montante (€)</label><input class="in" id="ssStake" inputmode="decimal" value="${String(SS.stake).replace('.', ',')}" oninput="SS.stake=num(this.value)"></div></div>
@@ -714,7 +714,7 @@ function openHow() {
    ${catH('chart', '1. Força de cada lutador', 'var(--c-red)')}<p>Um rating que sobe quando ganha e desce quando perde, mais ainda contra quem é forte. Quem tem poucos combates mexe muito; quem tem muitos, pouco. Ganhar por KO ou finalização conta ${Math.round(P.fin * 100)}% mais do que por decisão.</p>
    ${catH('user', '2. Corpo e idade', 'var(--c-orange)')}<p>Depois dos ${P.age0} anos, cada ano a mais pesa. Cada polegada de envergadura a mais ajuda um pouco. Estrear no UFC custa: os estreantes perdem mais do que ganham.</p>
    ${catH('glove', '3. Como acaba: riscos concorrentes', 'var(--c-red)')}<p>Cada lutador tem um <b>ritmo de KO</b> e um <b>ritmo de finalização</b> por minuto = base da categoria (os pesados acabam muito mais combates do que as moscas) × o ataque dele × a fragilidade do adversário. Os quatro ritmos «correm» ao mesmo tempo: o primeiro a acontecer acaba o combate. Se nenhum acontecer em ${'15'} (ou 25) minutos, vai à <b>decisão</b>.</p>
-   ${catH('clock', '4. Quando acaba', 'var(--c-purple)')}<p>O risco não é igual em todas as rondas: medido em 6.800 combates, a 2.ª ronda tem ${pct(SEED.rp['3'][1])} do risco da 1.ª e a 3.ª só ${pct(SEED.rp['3'][2])}. Daqui sai a curva, o «total de rondas» e o «vai até ao fim?».</p>
+   ${catH('clock', '4. Quando acaba', 'var(--c-purple)')}<p>O risco não é igual em todas as rondas: medido em 6.800 combates, a 2.ª ronda tem ${pct(SEED.rp['3'][1])} do risco da 1.ª e a 3.ª só ${pct(SEED.rp['3'][2])}. E dentro de cada ronda, o 1.º minuto é de «estudo»: só 64% do risco do resto. Daqui sai a curva, o «total de rondas» e o «vai até ao fim?».</p>
    ${catH('coins', '5. Mercado', 'var(--c-yellow)')}<p>Junta as odds da casa (ESPN) com peso alto — começa em ${pct(CFG.mktW)} no vencedor e ${pct(CFG.mktM)} no método — e vai aprendendo quanto confiar nelas (peso atual no vencedor: <b>${pct(calibW().w)}</b>).</p>
    ${catH('target', '6. O que dizem os testes às cegas', 'var(--c-green)')}<p>Afinado em 2013-18, escolhido com 2019-21 e testado sem ver o futuro em 2022-26 (${T.win.n.toLocaleString('pt-PT')} combates). O Ko sozinho acerta ~61% dos vencedores; as odds de fecho ~67%. <b>Honestidade:</b> no MMA as casas sabem coisas que os números não sabem (lesões, cortes de peso). O Ko brilha a pôr preço no <b>método</b> e nas <b>rondas</b>, e a dizer-te quando a Betano paga demais.</p>
    <p class="small muted">Contas: <b>Tu</b> apostas e o Ko dá opinião; <b>Mister Ko</b> responde a cada aposta tua (duelo); <b>Ko sozinho</b> é um bot: aposta ${eur(CFG.piStake)} em cada combate no lutador que a cabeça dele acha que ganha, sem ninguém lhe mexer.</p></div>`);

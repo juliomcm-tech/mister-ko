@@ -23,3 +23,8 @@
 
 ## Conclusão honesta
 As odds de MMA sabem muito (lesões, cortes de peso, campos de treino). O Ko serve para pôr preço em **todos** os desfechos (método e rondas), mesmo os que a casa não mostra, e para avisar quando a Betano paga acima do justo.
+
+## 1.2 · três agentes independentes (às cegas)
+**Revisão:** teste confirmado sem fugas (reprodução exata). Bugs corrigidos na 1.1/1.2: calibW ao contrário, apelidos que juntavam lutadores diferentes, decisão técnica, DQ, combate sem vencedor, lutador seguido pela id, combates retirados, base da categoria no replay. Método 85% casa + 15% Ko bate a casa (2019-21 e 2022-26, linhas limpas): 1,518 vs 1,524.
+**Forma e azarões (~127 hipóteses):** nada bate as odds. Azarão por KO: −27% (pesados −53%) em 2022-26. Viés favorito/azarão real → p = σ(1,08·logit p_sem_margem) (−1,8 mnats em 2022-26). A app deixou de sugerir valor em azarões < 30% e no método do azarão.
+**Boletim seguro:** odds de método estragadas em 2025-26 → guarda Σ1/odd ∈ [1,05; 1,40]. Seleções calibradas (ml, +0,5, +1,5 rondas), favorito primeiro, promessa com 1 ponto de folga, alvo 75%, máx. 4. 2022-26: prometia 0,790 → acertou 0,834 (antes 0,748 → 0,845). Combates do mesmo cartaz não se influenciam (regra do produto válida). 1.º minuto de cada ronda: risco ×0,64.
