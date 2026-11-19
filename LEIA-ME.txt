@@ -1,0 +1,13 @@
+MISTER KO · MMA (UFC)
+=====================
+App de análise e duelo de apostas (simulação, sem dinheiro real), só MMA.
+Abre o index.html (ou instala como app a partir do GitHub Pages).
+
+- Dados de base (seed.json): todos os combates do UFC desde 1994, de ufcstats.com,
+  via github.com/Greco1899/scrape_ufc_stats (atualizado todos os dias pelo autor).
+- Odds históricas para os testes às cegas: github.com/shortlikeafox/ultimate_ufc_dataset.
+- Ao vivo: ESPN (cartazes, resultados e odds DraftKings) — só quando carregas em ↻.
+- Estudos e testes às cegas: pasta estudos/.
+
+Para pôr a app online: GitHub → Settings → Pages → Branch: main / (root) → Save.
++18 · Joga com responsabilidade. © 2026 Júlio Melo
