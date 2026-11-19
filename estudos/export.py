@@ -21,7 +21,7 @@ for f in model.F:
 R, N, last, H = keep['R'], keep['N'], keep['last'], keep['H']
 FI = {}
 for n, d in last.items():
-    if d < '2019-01-01': continue
+    if d < '2015-01-01': continue
     h = H.get(n, {}); z = sty.get(n); t = tott.get(n) or {}
     FI[key(n)] = dict(n=name[n], r=round(R.get(n, 0), 4), k=N.get(n, 0), l=d, wc=wcl[n], rec=rec[n][:3], f5=last5[n],
         dob=t.get('dob'), h=t.get('h'), re=t.get('r'), st=t.get('st') or '',
@@ -30,7 +30,7 @@ for n, d in last.items():
 BASE = {k: [round(v[0], 1), round(v[1], 2), round(v[2], 2)] for k, v in keep['BASE'].items()}
 cut = model.F[-1]['d']
 seed = dict(v=1, cut=cut, par=P, base=BASE, rp={'3': [1, 0.81, 0.50], '5': [1, 0.93, 0.77, 0.49, 0.49]}, fi=FI,
-            test=dict(win=dict(ko=0.6612, mk=0.5887, n=1882), meth=dict(ko=1.615, base=1.6562, mk=1.5449, n=1736), bot=dict(acerto=0.607, roi=-0.02, n=1882)))
+            test=dict(win=dict(ko=0.6583, mk=0.5887, n=1882), meth=dict(ko=1.6161, base=1.6540, mk=1.5239, bl=1.5180, n=1496), bot=dict(acerto=0.607, roi=-0.02, n=1882, fav=0.716, favroi=0.008, dog=0.354, dogroi=-0.084)))
 json.dump(seed, open('/home/claude/ko-build/seed.json', 'w'), separators=(',', ':'), ensure_ascii=False)
 import os; print(len(FI), 'lutadores', cut, os.path.getsize('/home/claude/ko-build/seed.json') // 1024, 'KB')
 top = sorted(FI.values(), key=lambda x: -x['r'])[:8]; print([(x['n'], x['r'], x['wc']) for x in top])

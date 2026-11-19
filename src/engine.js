@@ -6,7 +6,7 @@
    ufcstats.com / Greco1899) + ESPN (cartazes, resultados e odds).
    Só vai à internet quando carregas em ↻. Tudo fica no telemóvel («ko_…»).
    ===================================================================== */
-const APP_VER = '1.0.1';
+const APP_VER = '1.1.0';
 
 /* ---------- utilitários ---------- */
 const $ = s => document.querySelector(s);
@@ -70,9 +70,10 @@ const arrOr = v => Array.isArray(v) ? v : [], objOr = v => v && typeof v === 'ob
 let DB = LS.get('db', null); if (!DB || !DB.f) DB = { f: {}, ev: {}, days: {} };
 let BETS = arrOr(LS.get('bets', [])), PREDS = objOr(LS.get('preds', {})), DEPOS = arrOr(LS.get('depos', [])), SLIPS = objOr(LS.get('slips', {}));
 let BO = objOr(LS.get('bo', {}));                // odds da Betano que tu metes (por combate)
-const CFG_DEF = { bank: { tu: 100, ko: 100, pi: 250 }, min: 0.25, piOn: true, piStake: 2.5, evMin: 0.05, mktW: 0.95, mktM: 0.85, oddMin: 1.25, oddMax: 6.0 };
+const CFG_DEF = { bank: { tu: 100, ko: 100, pi: 250 }, min: 0.25, piOn: true, piStake: 2.5, evMin: 0.05, mktW: 1.0, mktM: 0.85, oddMin: 1.25, oddMax: 6.0 };
 let CFG = Object.assign({}, CFG_DEF, objOr(LS.get('cfg', {})));
 CFG.bank = Object.assign({}, CFG_DEF.bank, CFG.bank || {});
+if (CFG.cfgV !== 2) { CFG.mktW = 1.0; CFG.cfgV = 2; }
 const saveDB = () => LS.set('db', DB);
 const saveBets = () => LS.set('bets', BETS);
 let SEED = null;
@@ -109,6 +110,8 @@ function methodOf(st) {
   const r = (st && st.result) || {}, t = [r.name, r.displayName, r.shortDisplayName, st && st.type && st.type.detail].filter(Boolean).join(' ');
   if (/no.?contest|\bnc\b|overturn/i.test(t)) return 'NC';
   if (/draw/i.test(t)) return 'D';
+  if (/\bdq\b|disq/i.test(t)) return 'DQ';
+  if (/strikes|tko|ko\b|kotko/i.test(t) && !/^sub/i.test(String((st && st.result && st.result.name) || ''))) return 'KO';
   if (/sub/i.test(t)) return 'SUB';
   if (/dec|points|judge/i.test(t)) return 'DEC';
   if (/ko|tko|dq|disq|doctor|stoppage|retire|corner|injur|could not/i.test(t)) return 'KO';
@@ -122,7 +125,8 @@ function clockSecs(st) {
 function ingestEvent(ev) {
   if (!ev || !Array.isArray(ev.competitions)) return 0;
   const eid = String(ev.id); let n = 0;
-  DB.ev[eid] = { id: eid, n: ev.name || ev.shortName || 'UFC', sn: ev.shortName || '', d: ev.date };
+  const seen = Date.now();
+  DB.ev[eid] = { id: eid, n: ev.name || ev.shortName || 'UFC', sn: ev.shortName || '', d: ev.date, seen };
   ev.competitions.forEach((c, idx) => {
     const cs = (c.competitors || []).slice().sort((a, b) => (a.order || 9) - (b.order || 9));
     if (cs.length !== 2) return;
@@ -132,14 +136,15 @@ function ingestEvent(ev) {
     const off = /POSTPON|CANCEL/i.test(String(st.name || '') + ' ' + String(st.description || ''));
     const s = off ? 'off' : (st.completed || st.state === 'post') ? 'post' : st.state === 'in' ? 'in' : 'pre';
     const id = String(c.id), old = DB.f[id] || {};
-    const sr = Number(c.format && c.format.regulation && c.format.regulation.periods) || old.sr || 3;
-    const f = { id, ev: eid, d: c.date || ev.date, A, B, wct: (c.type && (c.type.text || c.type.abbreviation)) || old.wct || '', sr: sr === 5 ? 5 : 3, ord: idx, s, src: 'espn' };
+    const sr = Number(c.format && c.format.regulation && c.format.regulation.periods) || old.sr || (/title|main event/i.test(JSON.stringify(c.notes || '') + ' ' + ((c.type && c.type.text) || '')) || idx === ev.competitions.length - 1 ? 5 : 3);
+    const f = { id, ev: eid, seen, d: c.date || ev.date, A, B, wct: (c.type && (c.type.text || c.type.abbreviation)) || old.wct || '', sr: sr === 5 ? 5 : 3, ord: idx, s, src: 'espn' };
     f.wc = wclassOf(f.wct);
     f.ttl = /title/i.test(String((c.type && c.type.text) || '') + ' ' + String((c.notes || []).map(x => x.headline).join(' ')));
     if (s === 'post') {
       f.w = cs[0].winner ? 'A' : cs[1].winner ? 'B' : null;
-      f.m = methodOf(S); if (f.m === 'D') f.w = 'D'; if (f.m === 'NC') f.w = 'NC';
-      if (!f.w && f.m !== 'D') f.w = 'NC';
+      f.m = methodOf(S);
+      if (f.m === 'D') { f.w = 'D'; f.m = 'DEC'; }
+      if (f.m === 'NC') f.w = 'NC';   // sem vencedor marcado e sem «empate»/«no contest» → fica pendente (f.w = null)
       f.rd = Number(S.period) || null; f.t = clockSecs(S);
       f.res = (S.result && (S.result.displayName || S.result.shortDisplayName)) || st.shortDetail || '';
     }
@@ -229,14 +234,13 @@ async function refresh() {
    ===================================================================== */
 let MODEL = null;
 const PC = new Map();
-function wcBase(wc) {
-  const b = SEED.base[wc] || SEED.base[wc.replace(/^W /, '')] || [0, 0, 0];
+function wcBase(wc, M) {
+  const S = (M && M.base) || SEED.base, b = S[wc] || S[wc.replace(/^W /, '')] || [0, 0, 0];
   return { ko: (b[1] + 20) / (b[0] + 20 / 0.02), sub: (b[2] + 10) / (b[0] + 10 / 0.012) };
 }
 function newHz() { return { koW: 0, koL: 0, subW: 0, subL: 0, eko: 0, ekoL: 0, esub: 0, esubL: 0, min: 0 }; }
 function fighterOf(M, s) {   // lutador da ESPN → estado do modelo (pela chave do nome; senão apelido + inicial)
   let k = s.k;
-  if (!M.F[k]) { const al = M.alias[k]; if (al) k = al; }
   if (!M.F[k]) M.F[k] = { n: s.n, r: 0, k: 0, l: null, hz: newHz(), f5: [], rec: [0, 0, 0], neo: 1 };
   return M.F[k];
 }
@@ -246,14 +250,11 @@ function buildModel() {
     F[k] = { n: x.n, r: x.r, k: x.k, l: x.l, dob: x.dob, h: x.h, re: x.re, st: x.st, wc: x.wc, sy: x.sy, rec: x.rec.slice(), f5: x.f5.map(a => a.slice()),
       hz: { koW: x.hz[0], koL: x.hz[1], subW: x.hz[2], subL: x.hz[3], eko: x.hz[4], ekoL: x.hz[5], esub: x.hz[6], esubL: x.hz[7], min: x.hz[8] } };
   });
-  // apelidos: o mesmo lutador com nome escrito de outra maneira (apelido + 1.ª letra)
-  const byLast = {};
-  Object.entries(SEED.fi).forEach(([k, x]) => { const L = fkey(lastName(x.n)) + '|' + fkey(x.n)[0]; (byLast[L] = byLast[L] || []).push(k); });
-  const alias = {};
-  Object.values(DB.f).forEach(f => [f.A, f.B].forEach(s => { if (F[s.k]) return; const c = byLast[fkey(lastName(s.n)) + '|' + s.k[0]]; if (c && c.length === 1) alias[s.k] = c[0]; }));
-  const M = { F, alias, nEspn: 0, base: {} };
+  // sem «apelidos» automáticos: juntavam lutadores diferentes (Alice Pereira ≠ Alex Pereira)
+  const base = {}; Object.entries(SEED.base).forEach(([k, v]) => { base[k] = v.slice(); });
+  const M = { F, nEspn: 0, base };
   const cut = SEED.cut;
-  const cutY = cut.replace(/-/g, ''), done = Object.values(DB.f).filter(f => f.s === 'post' && etYmd(new Date(f.d)) > cutY && f.w).sort((a, b) => a.d < b.d ? -1 : 1);
+  const cutY = cut.replace(/-/g, ''), evD = f => etYmd(new Date((DB.ev[f.ev] && DB.ev[f.ev].d) || f.d)), done = Object.values(DB.f).filter(f => f.s === 'post' && evD(f) > cutY && f.w).sort((a, b) => a.d < b.d ? -1 : 1);
   done.forEach(f => { M.nEspn++; updateWith(M, f); });
   return M;
 }
@@ -268,7 +269,7 @@ function rawX(M, f) {   // logit da probabilidade de A ganhar, só pelo Ko
 }
 function updateWith(M, f) {
   const P = SEED.par, R = rawX(M, f), a = R.a, b = R.b, pA = sig(R.x);
-  const wc = f.wc || 'Other', B = wcBase(wc), mins = f.rd ? (f.rd - 1) * 5 + (f.t || 0) / 60 : null;
+  const wc = f.wc || 'Other', B = wcBase(wc, M), mins = f.rd ? (f.rd - 1) * 5 + (f.t || 0) / 60 : null;
   const res = (me, op, side) => { const r = f.w === side ? 'W' : f.w === 'D' ? 'D' : f.w === 'NC' ? 'NC' : 'L'; me.f5.push([f.d.slice(0, 10), op.n, r, f.m || '', f.rd || '']); me.f5 = me.f5.slice(-5); if (r !== 'NC') me.rec[['W', 'L', 'D'].indexOf(r)]++; };
   res(a, b, 'A'); res(b, a, 'B');
   if (f.w === 'A' || f.w === 'B' || f.w === 'D') {
@@ -279,7 +280,9 @@ function updateWith(M, f) {
     a.k++; b.k++;
   }
   a.l = b.l = f.d.slice(0, 10);
-  if (mins != null && ['KO', 'SUB', 'DEC'].includes(f.m)) {
+  if (mins != null && ['KO', 'SUB', 'DEC', 'DQ'].includes(f.m)) {
+    const bb = M.base[wc] = M.base[wc] || [0, 0, 0], dk = SEED.par.bdec || 0.998;
+    bb[0] = bb[0] * dk + mins; bb[1] = bb[1] * dk + (f.m === 'KO' ? 1 : 0); bb[2] = bb[2] * dk + (f.m === 'SUB' ? 1 : 0);
     [[a, f.w === 'A'], [b, f.w === 'B']].forEach(([h, win]) => {
       const z = h.hz; Object.keys(z).forEach(k => { z[k] *= P.decay; });
       z.min += mins; z.eko += B.ko * mins; z.ekoL += B.ko * mins; z.esub += B.sub * mins; z.esubL += B.sub * mins;
@@ -301,14 +304,16 @@ function rescale(r, pA) {
   ['Ako', 'Asub', 'Adec'].forEach(k => { r[k] *= pA / sA; }); ['Bko', 'Bsub', 'Bdec'].forEach(k => { r[k] *= (1 - pA) / sB; });
   return r;
 }
+const FLB = 1.08;   // as casas pagam os favoritos um pouco abaixo do justo: p = σ(1,08·logit(p sem margem))
 let CALW = null;
-function calibW() {   // aprende quanto confiar nas odds (com as previsões guardadas antes de cada combate)
+function calibW() {   // aprende quanto confiar nas odds: escolhe o peso que menos erra nas previsões guardadas antes de cada combate
   const k = Object.keys(PREDS).length + '|' + LS.get('last', 0); if (CALW && CALW.k === k) return CALW;
-  let lm = 0, lk = 0, n = 0;
-  Object.entries(PREDS).forEach(([id, p]) => { const f = DB.f[id]; if (!f || f.s !== 'post' || (f.w !== 'A' && f.w !== 'B') || p.nv == null || p.pk0 == null) return; const y = f.w === 'A'; lm += -Math.log(y ? p.nv : 1 - p.nv); lk += -Math.log(y ? p.pk0 : 1 - p.pk0); n++; });
-  // regra simples: se o Ko errar menos do que as odds, ganha peso (devagar, com 150 combates de «inércia»)
-  const raw = n ? clamp(CFG.mktW + (lm - lk) / n * 2, 0.5, 1) : CFG.mktW;
-  CALW = { k, n, raw, w: clamp((n * raw + 150 * CFG.mktW) / (n + 150), 0.6, 0.99) };
+  const rows = [];
+  Object.entries(PREDS).forEach(([id, p]) => { const f = DB.f[id]; if (!f || f.s !== 'post' || (f.w !== 'A' && f.w !== 'B') || p.nv == null || p.pk0 == null) return; rows.push([logit(p.nv) * FLB, logit(p.pk0), f.w === 'A']); });
+  let best = CFG.mktW, bl = Infinity;
+  if (rows.length >= 30) for (let w = 0.6; w <= 1.0001; w += 0.02) { let s = 0; rows.forEach(([m, x, y]) => { const q = sig(w * m + (1 - w) * x); s -= Math.log(y ? q : 1 - q); }); if (s < bl) { bl = s; best = w; } }
+  const n = rows.length;
+  CALW = { k, n, raw: best, w: clamp((n * best + 300 * CFG.mktW) / (n + 300), 0.6, 1) };
   return CALW;
 }
 function predict(f) {
@@ -317,9 +322,9 @@ function predict(f) {
   const hit = PC.get(f.id); if (hit && hit.k === key) return hit.P;
   const R = rawX(M, f), pK = sig(R.x);
   let pNV = null, W = 0, pA = pK;
-  if (o.a > 1 && o.b > 1) { pNV = (1 / o.a) / (1 / o.a + 1 / o.b); W = calibW().w; pA = sig(W * logit(pNV) + (1 - W) * R.x); }
+  if (o.a > 1 && o.b > 1) { pNV = (1 / o.a) / (1 / o.a + 1 / o.b); W = calibW().w; pA = sig(W * FLB * logit(pNV) + (1 - W) * R.x); }
   // método: riscos concorrentes do Ko …
-  const B = wcBase(f.wc || 'Other'), a = R.a.hz, b = R.b.hz, c = P.c, ls = P.ls, lk = P.lk;
+  const B = wcBase(f.wc || 'Other', M), a = R.a.hz, b = R.b.hz, c = P.c, ls = P.ls, lk = P.lk;
   const g = Math.exp(P.beta * logit(pA));
   const lam = {
     Ako: ls * lk * B.ko * (a.koW + c) / (a.eko + c) * (b.koL + c) / (b.ekoL + c) * Math.sqrt(g),
@@ -343,7 +348,8 @@ function predict(f) {
   const out = { f, R, pK, pNV, W, pA, lam, T, m6, m6k, mk6, pdec, rp, lamR, S, pD: 0.006 };
   out.surv = t => { const r = Math.min(rp.length, Math.floor(t / 5)), rem = t - r * 5; return r >= rp.length ? S[rp.length] : S[r] * Math.exp(-lamR * rp[r] * rem); };
   out.cands = candidates(f, out);
-  const elig = out.cands.filter(c => c.src === 'Betano' && c.odd >= CFG.oddMin && c.odd <= CFG.oddMax).sort((x, y) => y.ev - x.ev);   // valor só contra a Betano
+  const dogSide = c => (c.mk === 'ml' || c.mk === 'met') && ((c.sel[0] === 'A') !== (pA >= 0.5));
+  const elig = out.cands.filter(c => c.src === 'Betano' && c.odd >= CFG.oddMin && c.odd <= CFG.oddMax && !(c.mk === 'met' && dogSide(c)) && !(c.mk === 'ml' && c.p < 0.30)).sort((x, y) => y.ev - x.ev);   // valor só contra a Betano
   out.best = elig[0] || null;
   out.value = out.best && out.best.ev >= CFG.evMin ? out.best : null;
   PC.set(f.id, { k: key, P: out });
@@ -369,7 +375,7 @@ function candidates(f, P) {
   add('dist', 'y', null, b.dy, 'Betano'); add('dist', 'n', null, b.dn, 'Betano');
   const ps = o.p || 'ESPN';
   if (o.a && o.b) { add('ml', 'A', null, o.a, ps); add('ml', 'B', null, o.b, ps); }
-  if (o.ou != null) { add('tr', 'o', o.ou, o.ovo || 1.91, ps); add('tr', 'u', o.ou, o.uno || 1.91, ps); }
+  if (o.ou != null) { add('tr', 'o', o.ou, o.ovo, ps); add('tr', 'u', o.ou, o.uno, ps); }
   return out;
 }
 const sn = s => lastName(s.n);
@@ -414,18 +420,29 @@ function accStats(acc) {
 }
 const canBet = f => f && f.s === 'pre' && new Date(f.d).getTime() > Date.now();
 function newBet(acc, f, c, stake, extra) {
-  const b = Object.assign({ id: acc + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), acc, g: f.id, gl: gLabel(f), gd: f.d, mk: c.mk, sel: c.sel, line: c.line == null ? null : c.line, odd: r2(c.odd), stake: r2(stake), t: Date.now(), st: 'open', ret: 0, lb: selLabel(f, c.mk, c.sel, c.line) }, extra || {});
+  const side = (c.mk === 'ml' || c.mk === 'met') ? (c.sel[0] === 'A' ? f.A : f.B) : null;
+  const b = Object.assign({ id: acc + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), acc, g: f.id, gl: gLabel(f), gd: f.d, mk: c.mk, sel: c.sel, sa: side ? side.aid || side.k : null, line: c.line == null ? null : c.line, odd: r2(c.odd), stake: r2(stake), t: Date.now(), st: 'open', ret: 0, lb: selLabel(f, c.mk, c.sel, c.line) }, extra || {});
   BETS.push(b); return b;
 }
 function outcome(b, f) {
+  const ev = DB.ev[f.ev];
+  if (f.s === 'pre' && ev && ev.seen && f.seen && ev.seen - f.seen > 6e4 && Date.now() - new Date(f.d).getTime() > 3 * 86400e3) return 'void';   // saiu do cartaz
   if (f.s === 'off') return Date.now() - new Date(f.d).getTime() > 3 * 86400e3 ? 'void' : null;
   if (f.s !== 'post' || !f.w) return null;
   if (f.w === 'NC') return 'void';
+  let sel = b.sel;
+  if (b.sa && (b.mk === 'ml' || b.mk === 'met')) {   // a ESPN pode trocar a ordem dos lutadores ou mudar o adversário
+    const isA = f.A.aid === b.sa || f.A.k === b.sa, isB = f.B.aid === b.sa || f.B.k === b.sa;
+    if (!isA && !isB) return 'void';
+    if (isB && sel[0] === 'A') sel = 'B' + sel.slice(1); else if (isA && sel[0] === 'B') sel = 'A' + sel.slice(1);
+  }
+  b = Object.assign({}, b, { sel });
   const mins = f.rd ? (f.rd - 1) * 5 + (f.t || 0) / 60 : null;
+  const full = (f.m === 'DEC' || f.w === 'D') && (!f.rd || f.rd >= f.sr);   // decisão técnica (antes do fim) não é «até ao fim»
   if (b.mk === 'ml') return f.w === 'D' ? 'push' : f.w === b.sel ? 'won' : 'lost';
-  if (b.mk === 'met') { if (f.w === 'D' || !f.m) return f.w === 'D' ? 'lost' : null; const k = f.w + ({ KO: 'ko', SUB: 'sub', DEC: 'dec' }[f.m] || ''); return k === b.sel ? 'won' : 'lost'; }
-  if (b.mk === 'dist') { const went = f.m === 'DEC' || f.w === 'D'; return (b.sel === 'y') === went ? 'won' : 'lost'; }
-  if (b.mk === 'tr') { if (mins == null && f.m !== 'DEC') return null; const m = f.m === 'DEC' || f.w === 'D' ? f.sr * 5 : mins; const under = m < b.line * 5; return (b.sel === 'u') === under ? 'won' : 'lost'; }
+  if (b.mk === 'met') { if (f.w === 'D') return 'lost'; if (!f.m) return null; const k = f.w + ({ KO: 'ko', DQ: 'ko', SUB: 'sub', DEC: 'dec' }[f.m] || ''); return k === b.sel ? 'won' : 'lost'; }
+  if (b.mk === 'dist') { if (!f.m) return null; return (b.sel === 'y') === full ? 'won' : 'lost'; }
+  if (b.mk === 'tr') { const m = full ? f.sr * 5 : mins; if (m == null) return null; const under = m < b.line * 5; return (b.sel === 'u') === under ? 'won' : 'lost'; }
   return null;
 }
 function newMulti(acc, legs, stake, extra) {
@@ -433,7 +450,7 @@ function newMulti(acc, legs, stake, extra) {
   const b = Object.assign({ id: acc + 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), acc, mk: 'multi', legs: legs.map(l => Object.assign({}, l)), g: legs[0].g, gl: legs.length + ' combates', gd: legs.reduce((m, l) => l.gd > m ? l.gd : m, legs[0].gd), odd, stake: r2(stake), t: Date.now(), st: 'open', ret: 0, lb: 'Múltipla · ' + legs.length + ' seleções' }, extra || {});
   BETS.push(b); return b;
 }
-const resTxt = f => !f || f.s !== 'post' ? '' : f.w === 'NC' ? 'sem resultado' : f.w === 'D' ? 'empate' : `${sn(f.w === 'A' ? f.A : f.B)} · ${({ KO: 'KO/TKO', SUB: 'finalização', DEC: 'decisão' }[f.m] || f.res || '')}${f.m !== 'DEC' && f.rd ? ' R' + f.rd + (f.t != null ? ' ' + Math.floor(f.t / 60) + ':' + String(f.t % 60).padStart(2, '0') : '') : ''}`;
+const resTxt = f => !f || f.s !== 'post' ? '' : !f.w ? 'à espera do resultado' : f.w === 'NC' ? 'sem resultado' : f.w === 'D' ? 'empate' : `${sn(f.w === 'A' ? f.A : f.B)} · ${({ KO: 'KO/TKO', DQ: 'desqualificação', SUB: 'finalização', DEC: (f.rd && f.rd < f.sr ? 'decisão técnica' : 'decisão') }[f.m] || f.res || '')}${(f.m !== 'DEC' || f.rd < f.sr) && f.rd ? ' R' + f.rd + (f.t != null ? ' ' + Math.floor(f.t / 60) + ':' + String(f.t % 60).padStart(2, '0') : '') : ''}`;
 function settleMulti(b) {
   let eff = 1, pending = false, lost = false;
   b.legs.forEach(l => { const f = DB.f[l.g]; const r = f ? outcome(l, f) : null; l.r = r; if (f && f.s === 'post') l.res = resTxt(f); if (r === null) pending = true; else if (r === 'lost') lost = true; else if (r === 'won') eff *= l.odd; });

@@ -92,8 +92,8 @@ function verdict(f) {
   if (f.w === 'NC') return null;
   const fav = p.pa >= 0.5 ? 'A' : 'B';
   const v = { p, win: f.w === 'D' ? null : f.w === fav, fav, conf: Math.max(p.pa, 1 - p.pa) };
-  if (p.m6 && f.m && f.w !== 'D') { const top = MET_K.slice().sort((a, b) => p.m6[b] - p.m6[a])[0]; v.met = top === f.w + ({ KO: 'ko', SUB: 'sub', DEC: 'dec' }[f.m] || ''); v.metTop = top; }
-  if (p.pdec != null && f.m) { const went = f.m === 'DEC' || f.w === 'D'; v.dist = (p.pdec >= 0.5) === went; }
+  if (p.m6 && f.m && f.w !== 'D') { const top = MET_K.slice().sort((a, b) => p.m6[b] - p.m6[a])[0]; v.met = top === f.w + ({ KO: 'ko', DQ: 'ko', SUB: 'sub', DEC: 'dec' }[f.m] || ''); v.metTop = top; }
+  if (p.pdec != null && f.m) { const went = (f.m === 'DEC' || f.w === 'D') && (!f.rd || f.rd >= f.sr); v.dist = (p.pdec >= 0.5) === went; }
   if (p.pk) { const o = outcome({ mk: p.pk.mk, sel: p.pk.sel, line: p.pk.line }, f); v.pk = p.pk; v.pkr = o; v.pku = o === 'won' ? p.pk.odd - 1 : o === 'lost' ? -1 : 0; }
   return v;
 }
@@ -668,10 +668,10 @@ function openStats() {
   const R = statsAll(), ss = safeStats(), T = SEED.test;
   const pm = (k, n) => { const [a, b] = wilson(k, n); return `${pct(k / n)} <small>(${Math.round(a * 100)}–${Math.round(b * 100)}%)</small>`; };
   let h = catH('target', 'Teste às cegas (antes da app)', 'var(--c-red)', `2022-26 · ${T.win.n.toLocaleString('pt-PT')} combates`) +
-    `<table class="tbl"><tr><th style="text-align:left">Erro médio (log-loss, menos é melhor)</th><th>Ko</th><th>Casas</th><th>Moeda ao ar</th></tr>
-     <tr><td style="text-align:left">Quem ganha</td><td>${gl(T.win.ko.toFixed(3))}</td><td>${gl(T.win.mk.toFixed(3))}</td><td>0,693</td></tr>
-     <tr><td style="text-align:left">Como acaba (6 desfechos)</td><td>${gl(T.meth.ko.toFixed(3))}</td><td>${gl(T.meth.mk.toFixed(3))}</td><td>1,792</td></tr></table>
-    <div class="small muted" style="margin-top:6px">Sem ver o futuro, o Ko sozinho fica atrás das odds de fecho, como quase todos os modelos públicos de MMA (as casas sabem de lesões, cortes de peso e campos de treino). Por isso a app junta as odds com peso alto. Onde o Ko ajuda: dá preço a <b>todos</b> os desfechos e rondas, mesmo quando a casa não os mostra, e no método bate a «média da categoria» (${gl(T.meth.base.toFixed(3))}).</div>`;
+    `<table class="tbl"><tr><th style="text-align:left">Erro médio (menos é melhor)</th><th>Ko</th><th>Casas</th><th>Ko + casa</th><th>Moeda</th></tr>
+     <tr><td style="text-align:left">Quem ganha</td><td>${gl(T.win.ko.toFixed(3))}</td><td><b>${gl(T.win.mk.toFixed(3))}</b></td><td>—</td><td>0,693</td></tr>
+     <tr><td style="text-align:left">Como acaba (6)</td><td>${gl(T.meth.ko.toFixed(3))}</td><td>${gl(T.meth.mk.toFixed(3))}</td><td><b>${gl((T.meth.bl || T.meth.mk).toFixed(3))}</b></td><td>1,792</td></tr></table>
+    <div class="small muted" style="margin-top:6px">Sem ver o futuro, o Ko sozinho fica atrás das odds de fecho, como quase todos os modelos públicos de MMA (as casas sabem de lesões, cortes de peso e campos de treino). Por isso a app junta as odds com peso alto. No vencedor, a app usa as odds (com uma pequena correção: as casas pagam os favoritos um pouco abaixo do justo). Onde o Ko ajuda: no <b>método</b>, juntar 15% do Ko às odds da casa erra menos do que a casa sozinha (confirmado em 2019-21 e 2022-26), e dá preço a todas as rondas, mesmo quando a casa não as mostra.</div>`;
   if (!R.n && !ss && !botStats().n) return openSheet('Estatísticas', h + `<div class="pn empty"><div class="face">${koFace('ok')}</div>As estatísticas da app enchem-se sozinhas: o Ko guarda a previsão de cada combate antes de começar. Toca em ↻ antes de cada cartaz.</div>`);
   const sl = Object.values(SLIPS).map(slipResult).filter(x => x && x.st !== 'open'), slW = sl.filter(x => x.st === 'won').length;
   h += catH('check', 'Na app', 'var(--c-green)', R.n + ' combates') +
