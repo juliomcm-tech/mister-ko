@@ -307,7 +307,7 @@ body.busy .top:after{content:"";position:absolute;left:0;right:0;bottom:0;height
    ufcstats.com / Greco1899) + ESPN (cartazes, resultados e odds).
    Só vai à internet quando carregas em ↻. Tudo fica no telemóvel («ko_…»).
    ===================================================================== */
-const APP_VER = '1.2.3';
+const APP_VER = '1.2.4';
 
 /* ---------- utilitários ---------- */
 const $ = s => document.querySelector(s);
@@ -424,6 +424,7 @@ function clockSecs(st) {
   if (st.displayClock && /^\d+:\d\d$/.test(st.displayClock)) { const [m, s] = st.displayClock.split(':').map(Number); return m * 60 + s; }
   const c = Number(st.clock); return isFinite(c) && c >= 0 && c <= 300 ? c : null;
 }
+const isPh = n => !n || n === '?' || /^(tbd|tba|to be (determined|announced)|opponent tba|vs\.? tba)$/i.test(String(n).trim());
 function ingestEvent(ev) {
   if (!ev || !Array.isArray(ev.competitions)) return 0;
   const eid = String(ev.id); let n = 0;
@@ -434,6 +435,7 @@ function ingestEvent(ev) {
     if (cs.length !== 2) return;
     const side = x => { const a = x.athlete || {}; const rec = (x.records || []).find(r => r.type === 'total') || (x.records || [])[0]; return { n: a.displayName || a.fullName || '?', id: String(x.id || a.id || ''), aid: String(a.id || x.id || ''), k: fkey(a.displayName || a.fullName), fl: a.flag && a.flag.href || '', ct: a.flag && a.flag.alt || '', hs: a.headshot && a.headshot.href || '', rec: rec && rec.summary || '' }; };
     const A = side(cs[0]), B = side(cs[1]);
+    if (isPh(A.n) || isPh(B.n)) { const pid = String(c.id); if (DB.f[pid] && DB.f[pid].s !== 'post' && !DB.f[pid].o) delete DB.f[pid]; return; }
     const S = c.status || {}, st = S.type || {};
     const off = /POSTPON|CANCEL/i.test(String(st.name || '') + ' ' + String(st.description || ''));
     const s = off ? 'off' : (st.completed || st.state === 'post') ? 'post' : st.state === 'in' ? 'in' : 'pre';
@@ -492,7 +494,7 @@ async function refresh() {
       const e2 = ymdAdd(d, 29) < end ? ymdAdd(d, 29) : end;
       if (!(DB.days[d + '-' + e2] && e2 < ymdAdd(T, -3))) {
         setUpd(`⏳ A buscar cartazes ${d.slice(6)}/${d.slice(4, 6)}–${e2.slice(6)}/${e2.slice(4, 6)}…`);
-        try { const j = await getJSON(`${ESPN}/scoreboard?dates=${d}-${e2}&limit=200`); if (!j || !Array.isArray(j.events)) throw new Error('resposta sem eventos'); j.events.forEach(e => { got += ingestEvent(e); }); if (e2 < ymdAdd(T, -3)) DB.days[d + '-' + e2] = 1; }
+        try { const j = await getJSON(`${ESPN}/scoreboard?dates=${d}-${e2}&limit=200`); if (!j || !Array.isArray(j.events)) throw new Error('resposta sem eventos'); j.events.forEach(e => { got += ingestEvent(e); }); if (e2 < ymdAdd(T, -3) && !stuckBetween(d, e2)) DB.days[d + '-' + e2] = 1; }
         catch (e) { fails++; }
       }
       d = ymdAdd(e2, 1);
@@ -750,6 +752,21 @@ function outcome(b, f) {
   if (b.mk === 'tr') { const m = full ? f.sr * 5 : mins; if (m == null) return null; const under = m < b.line * 5; return (b.sel === 'u') === under ? 'won' : 'lost'; }
   return null;
 }
+
+/* ===== robustez: nenhuma aposta fica presa para sempre =====
+   jogo acabado mas impossível de conferir (falta um dado da ESPN, mercado sem regra) → anula ao fim de 5 dias;
+   jogo que nunca chegou a «acabado» → anula ao fim de 10 dias (a aposta volta para a banca) */
+outcome = (function (prev) { return function (b, g) {
+  const r = prev(b, g); if (r != null || !g || !g.d) return r;
+  const age = Date.now() - Date.parse(g.d);
+  if (g.s === 'post' && age > 5 * 864e5) return 'void';
+  if (g.s !== 'post' && age > 10 * 864e5) return 'void';
+  return r;
+}; })(outcome);
+/* um dia (ou bloco de dias) só fica «feito» quando todos os jogos dele já acabaram — senão volta a ser pedido à ESPN
+   (até 30 dias para trás), para um resultado que veio atrasado não deixar jogos e apostas pendurados */
+const stuckBetween = (a, b) => { const t0 = Date.parse(a.slice(0, 4) + '-' + a.slice(4, 6) + '-' + a.slice(6, 8) + 'T00:00:00Z') - 12 * 3600e3, t1 = Date.parse(b.slice(0, 4) + '-' + b.slice(4, 6) + '-' + b.slice(6, 8) + 'T23:59:59Z') + 12 * 3600e3, now = Date.now();
+  return Object.values(DB.f).some(g => { const t = Date.parse(g.d); return t >= t0 && t <= t1 && t < now - 6 * 3600e3 && t > now - 30 * 864e5 && g.s !== 'post' && g.s !== 'off'; }); };
 function newMulti(acc, legs, stake, extra) {
   const odd = r2(legs.reduce((a, l) => a * l.odd, 1));
   const b = Object.assign({ id: acc + 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), acc, mk: 'multi', legs: legs.map(l => Object.assign({}, l)), g: legs[0].g, gl: legs.length + ' combates', gd: legs.reduce((m, l) => l.gd > m ? l.gd : m, legs[0].gd), odd, stake: r2(stake), t: Date.now(), st: 'open', ret: 0, lb: 'Múltipla · ' + legs.length + ' seleções' }, extra || {});
